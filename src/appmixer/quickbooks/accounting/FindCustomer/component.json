@@ -408,6 +408,10 @@
                     "value": "Customer.Id"
                 },
                 {
+                    "label": "Customer Sales Term",
+                    "value": "Customer.SalesTermRef.value"
+                },
+                {
                     "label": "Customer Meta Data Create Time",
                     "value": "Customer.MetaData.CreateTime"
                 },
