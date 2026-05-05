@@ -140,7 +140,7 @@ class ZohoClient {
         }
         const arrayRecord = response[arrayDataKey];
         const result = Array.isArray(arrayRecord) ? arrayRecord.pop() : null;
-        if (result?.status === 'error') {
+        if (result && result.status && result.status === 'error') {
             const error = new Error(result.message);
             error.code = result.code;
             error.data = result;
@@ -149,11 +149,7 @@ class ZohoClient {
         return result;
     }
 
-    async requestPaginated(
-        method,
-        url,
-        { dataKey = 'data', countLimit = 500, data = {}, headers = {}, params = {} } = {}
-    ) {
+    async requestPaginated(method, url, { dataKey = 'data', countLimit = 500, data = {}, headers = {}, params = {} } = {}) {
 
         let records = [];
         params.per_page = 200; // Zoho default is 200
@@ -193,7 +189,7 @@ class ZohoClient {
         return this.client(request)
             .then(response => response.data)
             .catch(e => {
-                if (e.response?.data) {
+                if (e.response && e.response.data) {
                     if (Array.isArray(e.response.data)) {
                         const errorData = e.response.data[0];
                         throw errorData;
