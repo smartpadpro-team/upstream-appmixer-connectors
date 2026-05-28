@@ -30,7 +30,7 @@ module.exports = {
             Invoices: [
                 {
                     Type,
-                    Contact: { ContactID },
+                    Contact: {ContactID},
                     // // LineItems,
                     Date,
                     DueDate,
@@ -49,19 +49,30 @@ module.exports = {
             ]
         };
 
-        // Structure of this field is not clear from the docs.
-        if (LineItems) {
-            try {
-                data.Invoices[0].LineItems = JSON.parse(LineItems);
-            } catch (e) {
-                // If the value is not a valid JSON, throw an error.
-                throw new context.CancelError('Error parsing LineItems. Please check the syntax.', e);
+        try {
+            // Structure of this field is not clear from the docs.
+            if (LineItems) {
+                try {
+                    data.Invoices[0].LineItems = JSON.parse(LineItems);
+                } catch (e) {
+                    // If the value is not a valid JSON, throw an error.
+                    throw new context.CancelError('Error parsing LineItems. Please check the syntax.', e);
+                }
             }
+
+            const xc = new XeroClient(context, tenantId);
+            const {Invoices} = await xc.request('PUT', '/api.xro/2.0/Invoices', {data});
+
+            return context.sendJson(Invoices[0], 'out');
+
+        } catch (e) {
+            // If the value is not a valid JSON, throw an error.
+            const errorMessage = e.message ?? 'Error encountered creating the invoice in Xero';
+            return context.sendJson({
+                message: errorMessage
+            }, 'error');
         }
 
-        const xc = new XeroClient(context, tenantId);
-        const { Invoices } = await xc.request('PUT', '/api.xro/2.0/Invoices', { data });
 
-        return context.sendJson(Invoices[0], 'out');
     }
 };
