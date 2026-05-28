@@ -1440,8 +1440,8 @@
             "name": "error",
             "options": [
                 {
-                    "label": "Message",
-                    "value": "message"
+                    "label": "Error",
+                    "value": "Error"
                 }
             ]
         }
