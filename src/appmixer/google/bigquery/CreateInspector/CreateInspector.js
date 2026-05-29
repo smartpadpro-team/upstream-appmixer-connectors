@@ -229,7 +229,13 @@ function createSchemaField(inputSchema) {
         'DATETIME': { type: 'string' },
         'GEOGRAPHY': { type: 'string' },
         'RECORD': { type: 'string' },
-        'INTEGER': { type: 'number' }
+        'INTEGER': { type: 'number' },
+        'JSON': {
+            anyOf: [
+                { type: 'object' },
+                { type: 'array' }
+            ]
+        }
     };
 
     return {
@@ -255,6 +261,7 @@ function createInput(idx, inputSchema) {
         'DATETIME': { input: 'datetime' },
         'GEOGRAPHY': { input: 'text' },
         'RECORD': { input: 'text' },
+        'JSON': { input: 'textarea' },
         'INTEGER': { input: 'number' }
     };
 
