@@ -596,6 +596,10 @@
                     }
                 },
                 {
+                    "label": "Customer Sales Term Ref",
+                    "value": "Customer.SalesTermRef"
+                },
+                {
                     "label": "Time",
                     "value": "time",
                     "schema": {
