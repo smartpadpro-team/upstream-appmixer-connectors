@@ -1,7 +1,7 @@
 {
     "name": "appmixer.google.bigquery.QuoteriteToBigQueryPattern",
     "author": "Quoterite Dev <devops@quoterite.com>",
-    "description": "Fetch a Quoterite lifecycle snapshot and insert it into a BigQuery table.",
+    "description": "Fetch multiple heavy Quoterite lifecycle records and stream them into BigQuery safely via an atomic Load Job pipeline.",
     "quota": {
         "manager": "appmixer:google:bigquery",
         "resources": "requests",
@@ -23,29 +23,22 @@
             "schema": {
                 "type": "object",
                 "properties": {
-                    "projectId": {
-                        "type": "string"
-                    },
-                    "datasetId": {
-                        "type": "string"
-                    },
-                    "tableId": {
-                        "type": "string"
-                    },
-                    "client_id": {
-                        "type": "string"
-                    },
-                    "client_secret": {
-                        "type": "string"
-                    },
-                    "lifecycle_id": {
-                        "type": "string"
-                    },
-                    "snapshot_date": {
-                        "type": "string"
-                    },
-                    "ingested_at": {
-                        "type": "string"
+                    "projectId": { "type": "string" },
+                    "datasetId": { "type": "string" },
+                    "tableId": { "type": "string" },
+                    "client_id": { "type": "string" },
+                    "client_secret": { "type": "string" },
+                    "ingested_at": { "type": "string" },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "lifeCycleId": { "type": "string" },
+                                "updated_at": { "type": "string" }
+                            },
+                            "required": ["lifeCycleId"]
+                        }
                     }
                 },
                 "required": [
@@ -54,7 +47,7 @@
                     "tableId",
                     "client_id",
                     "client_secret",
-                    "lifecycle_id"
+                    "items"
                 ]
             },
             "inspector": {
@@ -68,8 +61,7 @@
                             "data": {
                                 "transform": "./ListProjects#toSelectArray"
                             }
-                        },
-                        "tooltip": "Select the target project."
+                        }
                     },
                     "datasetId": {
                         "type": "select",
@@ -83,8 +75,7 @@
                                 },
                                 "transform": "./ListDatasets#toSelectArray"
                             }
-                        },
-                        "tooltip": "Select the target dataset."
+                        }
                     },
                     "tableId": {
                         "type": "select",
@@ -99,38 +90,27 @@
                                 },
                                 "transform": "./ListTables#toSelectArray"
                             }
-                        },
-                        "tooltip": "Select the target table."
-                    },
-                    "lifecycle_id": {
-                        "type": "text",
-                        "label": "Lifecycle ID",
-                        "index": 4,
-                        "tooltip": "Enter the Quoterite lifecycle ID to fetch."
+                        }
                     },
                     "client_id": {
                         "type": "text",
                         "label": "Quoterite Client ID",
-                        "index": 5,
-                        "tooltip": "Enter the Quoterite API client ID."
+                        "index": 4
                     },
                     "client_secret": {
                         "type": "text",
                         "label": "Quoterite Client Secret",
-                        "index": 6,
-                        "tooltip": "Enter the Quoterite API client secret."
+                        "index": 5
                     },
-                    "snapshot_date": {
-                        "type": "text",
-                        "label": "Snapshot Date",
-                        "index": 7,
-                        "tooltip": "Enter the snapshot date value to store with the payload."
+                    "items": {
+                        "type": "multiselect",
+                        "label": "Lifecycle Items Array",
+                        "index": 6
                     },
                     "ingested_at": {
                         "type": "text",
                         "label": "Ingested At",
-                        "index": 8,
-                        "tooltip": "Enter the ingestion timestamp value to store with the payload."
+                        "index": 7
                     }
                 }
             }
@@ -139,13 +119,18 @@
     "outPorts": [
         {
             "name": "out",
-            "options": [
-                {
-                    "label": "Status",
-                    "value": "status"
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "status": { "type": "string" },
+                    "insertedRows": { "type": "number" }
                 }
+            },
+            "options": [
+                { "label": "Status", "value": "status" },
+                { "label": "Inserted Rows", "value": "insertedRows" }
             ]
         }
     ],
-    "icon": "data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjI1MDAiIHdpZHRoPSIyNTAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0xLjYzMzIzNTQzMzMyODI1NiA3LjAzMjYwOTMzMDMxNTY1NjUgMTMxLjI2NTc0NjgyNDE2ODc2IDExNC42MzQzOTA2Njk2ODQzNSI+PGxpbmVhckdyYWRpZW50IGlkPSJhIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjY0IiB4Mj0iNjQiIHkxPSI3LjAzNCIgeTI9IjEyMC43ODkiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzQzODdmZCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzQ2ODNlYSIvPjwvbGluZWFyR3JhZGllbnQ+PHBhdGggZD0iTTI3Ljc5IDExNS4yMTdMMS41NCA2OS43NDlhMTEuNDk5IDExLjQ5OSAwIDAgMSAwLTExLjQ5OWwyNi4yNS00NS40NjdhMTEuNSAxMS41IDAgMCAxIDkuOTYtNS43NWg1Mi41YTExLjUgMTEuNSAwIDAgMSA5Ljk1OSA1Ljc1bDI2LjI1IDQ1LjQ2N2ExMS40OTkgMTEuNDk5IDAgMCAxIDAgMTEuNWwtMjYuMjUgNDUuNDY3YTExLjUgMTEuNSAwIDAgMS05Ljk1OSA1Ljc0OWgtNTIuNWExMS40OTkgMTEuNDk5IDAgMCAxLTkuOTYtNS43NXoiIGZpbGw9InVybCgjYSkiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGQ9Ik0xMTkuMjI5IDg2LjQ4TDgwLjYyNSA0Ny44NzQgNjQgNDMuNDI1bC0xNC45MzMgNS41NUw0My4zIDY0bDQuNjM3IDE2LjcyOSA0MC45MzggNDAuOTM4IDguNjg3LS4zODZ6IiBvcGFjaXR5PSIuMDciLz48ZyBmaWxsPSIjZmZmIj48cGF0aCBkPSJNNjQgNDAuODA0Yy0xMi44MSAwLTIzLjE5NSAxMC4zODUtMjMuMTk1IDIzLjE5NiAwIDEyLjgxIDEwLjM4NSAyMy4xOTUgMjMuMTk1IDIzLjE5NVM4Ny4xOTQgNzYuODEgODcuMTk0IDY0YzAtMTIuODExLTEwLjM4NS0yMy4xOTYtMjMuMTk0LTIzLjE5Nm0wIDQwLjc5NWMtOS43MiAwLTE3LjYtNy44OC0xNy42LTE3LjZTNTQuMjggNDYuNCA2NCA0Ni40IDgxLjYgNTQuMjggODEuNiA2NCA3My43MiA4MS42IDY0IDgxLjYiLz48cGF0aCBkPSJNNTIuOTkgNjMuMTA0djcuMjFhMTIuNzk0IDEyLjc5NCAwIDAgMCA0LjM4IDQuNDc1VjYzLjEwNHpNNjEuNjc1IDU3LjAyNnYxOS40MTFjLjc0NS4xMzcgMS41MDcuMjIgMi4yOS4yMi43MTQgMCAxLjQxLS4wNzUgMi4wOTMtLjE4OVY1Ny4wMjZ6TTcwLjc2NiA2Ni4xdjguNTYyYTEyLjc4NiAxMi43ODYgMCAwIDAgNC4zODItNC43di0zLjg2MXpNODAuNjkxIDc4LjI4N2wtMi40MDMgMi40MDVhMS4wODggMS4wODggMCAwIDAgMCAxLjUzN2w5LjExNSA5LjExMmExLjA4OCAxLjA4OCAwIDAgMCAxLjUzNyAwbDIuNDAzLTIuNDAyYTEuMDkyIDEuMDkyIDAgMCAwIDAtMS41MzZsLTkuMTE2LTkuMTE2YTEuMDkgMS4wOSAwIDAgMC0xLjUzNiAwIi8+PC9nPjwvc3ZnPg=="
+    "icon": "data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjI1MDAiIHdpZHRoABA..."
 }
