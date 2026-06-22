@@ -1541,8 +1541,8 @@
             "name": "error",
             "options": [
                 {
-                    "label": "Error",
-                    "value": "Error"
+                    "label": "Message",
+                    "value": "message"
                 }
             ]
         }
