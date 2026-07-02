@@ -68,10 +68,17 @@ module.exports = {
                 data.PaymentTerms = PaymentTerms;
             }
         }
+        try {
+            const xc = new XeroClient(context, tenantId);
+            const { Contacts } = await xc.request('PUT', '/api.xro/2.0/Contacts', { data });
 
-        const xc = new XeroClient(context, tenantId);
-        const { Contacts } = await xc.request('PUT', '/api.xro/2.0/Contacts', { data });
-
-        return context.sendJson(Contacts[0], 'out');
+            return context.sendJson(Contacts[0], 'out');
+        } catch (e) {
+            // If the value is not a valid JSON, throw an error.
+            const errorMessage = e.message ?? 'Error encountered creating contact in XERO';
+            return context.sendJson({
+                message: errorMessage
+            }, 'error');
+        }
     }
 };
