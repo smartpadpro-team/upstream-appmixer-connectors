@@ -12,9 +12,9 @@ module.exports = {
 
         try {
             const xc = new XeroClient(context, tenantId);
-            const { Invoices } = await xc.request('POST', '/api.xro/2.0/Invoices/'+InvoiceID+'/Email', { });
+            await xc.request('POST', '/api.xro/2.0/Invoices/'+InvoiceID+'/Email', { });
 
-            return context.sendJson(Invoices[0], 'out');
+            return context.sendJson({ message: `Invoice ${InvoiceID}: email sent`}, 'out');
         } catch (e) {
             // If the value is not a valid JSON, throw an error.
             const errorMessage = e.message ?? 'Error encountered sending invoice email';

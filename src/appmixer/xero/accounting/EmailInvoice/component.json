@@ -45,7 +45,12 @@
     "outPorts": [
         {
             "name": "out",
-            "options": []
+            "options": [
+                {
+                    "label": "Message",
+                    "value": "message"
+                 }
+            ]
         },
         {
             "name": "error",
