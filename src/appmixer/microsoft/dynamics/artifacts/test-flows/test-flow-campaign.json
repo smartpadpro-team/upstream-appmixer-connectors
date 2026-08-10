@@ -5,25 +5,16 @@
             "x": 80,
             "y": 144,
             "source": {},
-            "config": {}
-        },
-        "970eef5b-d5d5-4934-960d-189febb9c1cf": {
-            "type": "appmixer.utils.test.BeforeAll",
-            "x": 80,
-            "y": 288,
-            "source": {
-                "in": {
-                    "17e7381b-80bf-4877-add7-018bcfd69dd9": [
-                        "out"
-                    ]
-                }
-            },
-            "version": "1.0.0"
+            "config": {},
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
+            }
         },
         "db7fbead-036e-446f-ae43-3c6f786a3d30": {
             "type": "appmixer.utils.test.AfterAll",
-            "x": 960,
-            "y": 304,
+            "x": 1520,
+            "y": 80,
             "source": {
                 "in": {
                     "69c85c34-fa2e-4ea5-9010-1e03aa2d7786": [
@@ -39,12 +30,16 @@
                 "properties": {
                     "timeout": 30
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         },
         "1b7996eb-4be9-4783-9edd-149284dc0a27": {
             "type": "appmixer.utils.test.ProcessE2EResults",
-            "x": 1072,
-            "y": 304,
+            "x": 1728,
+            "y": 80,
             "source": {
                 "in": {
                     "db7fbead-036e-446f-ae43-3c6f786a3d30": [
@@ -79,6 +74,10 @@
                         }
                     }
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         },
         "651159f3-a81e-49b1-9dcc-74769b28ca0b": {
@@ -119,35 +118,30 @@
                         }
                     }
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         },
         "4a9fa576-45fb-4e43-9753-e148775fcd24": {
             "type": "appmixer.microsoft.dynamics.CreateObjectRecord",
             "x": 400,
             "y": 144,
-            "version": "1.0.0",
+            "version": "1.0.1",
             "label": "Create campaign - rawJson",
             "config": {
                 "transform": {
                     "in": {
-                        "6a7031f7-b399-4a87-be7f-b01ba2125548": {},
                         "651159f3-a81e-49b1-9dcc-74769b28ca0b": {
                             "out": {
                                 "type": "json2new",
                                 "modifiers": {
-                                    "objectName": {},
-                                    "rawJson": {},
-                                    "json": {
-                                        "7421c4b5-a592-4d0c-8364-ee1671c7ecdd": {
-                                            "variable": "$.651159f3-a81e-49b1-9dcc-74769b28ca0b.out.campaignname",
-                                            "functions": []
-                                        }
-                                    }
+                                    "objectName": {}
                                 },
                                 "lambda": {
                                     "objectName": "campaign",
-                                    "rawJson": true,
-                                    "json": "{\n\"name\":\"{{{7421c4b5-a592-4d0c-8364-ee1671c7ecdd}}}\",\n\"typecode\":\"1\"\n}"
+                                    "rawJson": false
                                 }
                             }
                         }
@@ -160,12 +154,16 @@
                         "out"
                     ]
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         },
         "17e7381b-80bf-4877-add7-018bcfd69dd9": {
             "type": "appmixer.microsoft.dynamics.CreateObjectRecord",
-            "x": 608,
-            "y": 144,
+            "x": 864,
+            "y": 240,
             "source": {
                 "in": {
                     "4a9fa576-45fb-4e43-9753-e148775fcd24": [
@@ -173,7 +171,7 @@
                     ]
                 }
             },
-            "version": "1.0.0",
+            "version": "1.0.1",
             "config": {
                 "transform": {
                     "in": {
@@ -181,34 +179,28 @@
                             "out": {
                                 "type": "json2new",
                                 "modifiers": {
-                                    "objectName": {},
-                                    "rawJson": {},
-                                    "name": {
-                                        "6c0d1d3e-9a5c-4dcf-9a4f-9e4cbc314a13": {
-                                            "variable": "$.651159f3-a81e-49b1-9dcc-74769b28ca0b.out.campaignname",
-                                            "functions": []
-                                        }
-                                    },
-                                    "typecode": {}
+                                    "objectName": {}
                                 },
                                 "lambda": {
                                     "objectName": "campaign",
-                                    "rawJson": false,
-                                    "name": "{{{6c0d1d3e-9a5c-4dcf-9a4f-9e4cbc314a13}}} - Fields",
-                                    "typecode": "1"
+                                    "rawJson": false
                                 }
                             }
                         }
                     }
                 }
             },
-            "label": "Create campaign - fields"
+            "label": "Create campaign - fields",
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
+            }
         },
         "ca43f7a6-6c8c-4211-a006-36660b973e23": {
             "type": "appmixer.microsoft.dynamics.DeleteObjectRecord",
-            "x": 608,
-            "y": 288,
-            "version": "1.0.0",
+            "x": 768,
+            "y": -16,
+            "version": "1.0.1",
             "config": {
                 "transform": {
                     "in": {
@@ -230,6 +222,9 @@
                             }
                         }
                     }
+                },
+                "properties": {
+                    "account": "6a4d0b3374eaf6ddca810f90"
                 }
             },
             "label": "Delete campaign - rawJson",
@@ -239,12 +234,16 @@
                         "out"
                     ]
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         },
         "94fcd2a7-b53e-45cc-b50f-075178820560": {
             "type": "appmixer.microsoft.dynamics.DeleteObjectRecord",
-            "x": 608,
-            "y": 432,
+            "x": 1200,
+            "y": 192,
             "source": {
                 "in": {
                     "17e7381b-80bf-4877-add7-018bcfd69dd9": [
@@ -252,7 +251,7 @@
                     ]
                 }
             },
-            "version": "1.0.0",
+            "version": "1.0.1",
             "config": {
                 "transform": {
                     "in": {
@@ -275,14 +274,21 @@
                             }
                         }
                     }
+                },
+                "properties": {
+                    "account": "6a4d0b3374eaf6ddca810f90"
                 }
             },
-            "label": "Delete campaign - fields"
+            "label": "Delete campaign - fields",
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
+            }
         },
         "69c85c34-fa2e-4ea5-9010-1e03aa2d7786": {
             "type": "appmixer.utils.test.Assert",
-            "x": 768,
-            "y": 64,
+            "x": 1200,
+            "y": 368,
             "source": {
                 "in": {
                     "17e7381b-80bf-4877-add7-018bcfd69dd9": [
@@ -330,12 +336,16 @@
                         }
                     }
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         },
         "02850374-2ceb-4ca9-84b4-4e0af3a0a6f6": {
             "type": "appmixer.utils.test.Assert",
-            "x": 768,
-            "y": 208,
+            "x": 736,
+            "y": 144,
             "source": {
                 "in": {
                     "4a9fa576-45fb-4e43-9753-e148775fcd24": [
@@ -383,10 +393,17 @@
                         }
                     }
                 }
+            },
+            "errorHandling": {
+                "autoRetry": false,
+                "onError": "stopFlow"
             }
         }
     },
     "name": "E2E - Microsoft Dynamics Sales/CRM - Campaign",
+    "notes": {},
     "type": "automation",
-    "notes": {}
+    "wizard": {
+        "fields": []
+    }
 }
