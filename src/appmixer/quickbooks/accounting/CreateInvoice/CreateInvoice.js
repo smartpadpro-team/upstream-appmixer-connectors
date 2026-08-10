@@ -97,7 +97,15 @@ module.exports = {
         };
 
         context.log({ step: 'Making request', options });
-        const response = await makeRequest({ context, options });
-        return context.sendJson(response.data?.Invoice, 'out');
+        try {
+            const response = await makeRequest({context, options});
+            return context.sendJson(response.data?.Invoice, 'out');
+        } catch (e) {
+            // If the value is not a valid JSON, throw an error.
+            const errorMessage = e.message ?? 'Error encountered creating invoice in Quickbooks';
+            return context.sendJson({
+                message: errorMessage
+            }, 'error');
+        }
     }
 };
