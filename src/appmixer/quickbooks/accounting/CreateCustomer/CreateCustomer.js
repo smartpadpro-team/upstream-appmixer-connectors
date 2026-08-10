@@ -52,7 +52,15 @@ module.exports = {
         };
 
         context.log({ step: 'request', options });
-        const response = await makeRequest({ context, options });
-        return context.sendJson(response.data?.Customer, 'out');
+        try{
+            const response = await makeRequest({ context, options });
+            return context.sendJson(response.data?.Customer, 'out');
+        } catch (e) {
+            // If the value is not a valid JSON, throw an error.
+            const errorMessage = e.message ?? 'Error encountered creating contact in Quickbooks';
+            return context.sendJson({
+                message: errorMessage
+            }, 'error');
+        }
     }
 };
