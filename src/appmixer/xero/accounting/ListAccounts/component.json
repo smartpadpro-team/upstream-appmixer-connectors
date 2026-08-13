@@ -28,6 +28,13 @@
                     "outputType": {
                         "type": "string"
                     },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "ALL",
+                            "BANK"
+                        ]
+                    },
                     "order": {
                         "type": "string"
                     },
