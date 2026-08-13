@@ -15,6 +15,7 @@ module.exports = {
                 'profile',
                 'email',
                 'offline_access',
+                'accounting.banktransactions',
                 'accounting.settings.read'
             ],
 

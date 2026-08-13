@@ -9,7 +9,7 @@ module.exports = {
     async receive(context) {
 
         const generateOutputPortOptions = context.properties.generateOutputPortOptions;
-        const { tenantId, outputType, ...params } = context.messages.in.content;
+        const { tenantId, outputType, type, ...params } = context.messages.in.content;
 
         if (generateOutputPortOptions) {
             return this.getOutputPortOptions(context, outputType);
@@ -19,10 +19,14 @@ module.exports = {
             throw new context.CancelError('Tenant ID is required!');
         }
 
+        if (type === 'BANK' && !params.where) {
+            params.where = 'Type=="BANK"';
+        }
+
         // Cache the assembled accounts array so repeated inspector source calls reuse one fetch.
         const records = await withCache(
             context,
-            { tenantId, url: '/api.xro/2.0/Accounts', params },
+            { tenantId, url: '/api.xro/2.0/Accounts', params, type },
             () => new XeroClient(context, tenantId).requestPaginated('GET', '/api.xro/2.0/Accounts', { params })
         );
 
