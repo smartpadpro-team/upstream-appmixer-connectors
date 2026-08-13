@@ -1,0 +1,134 @@
+{
+  "name": "appmixer.xero.accounting.CreatePrepayment",
+  "author": "Drew <drew@quoterite.com>",
+  "description": "Create a prepayment in Xero.",
+  "private": false,
+  "auth": {
+    "service": "appmixer:xero",
+    "scope": [
+      "accounting.transactions"
+    ]
+  },
+  "inPorts": [
+    {
+      "name": "in",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "tenantId": { "type": "string" },
+          "contactId": { "type": "string" },
+          "bankAccount": { "type": "string" },
+          "prepaymentLineAccount": { "type": "string" },
+          "amount": { "type": "number" },
+          "date": { "type": "string" },
+          "reference": { "type": "string" }
+        },
+        "required": ["tenantId", "contactId", "bankAccount", "prepaymentLineAccount", "amount"]
+      },
+      "inspector": {
+        "inputs": {
+          "tenantId": {
+            "type": "text",
+            "label": "Tenant ID",
+            "index": 1,
+            "source": {
+              "url": "/component/appmixer/xero/accounting/ListTenants?outPort=tenants",
+              "data": {
+                "transform": "./transformers#tenantsToSelectArray"
+              }
+            }
+          },
+          "contactId": {
+            "type": "text",
+            "label": "Contact ID",
+            "index": 2
+          },
+          "bankAccount": {
+            "type": "text",
+            "label": "Bank Account",
+            "index": 3,
+            "tooltip": "Select the Xero bank account where the prepayment was received.",
+            "source": {
+              "url": "/component/appmixer/xero/accounting/ListAccounts?outPort=accounts",
+              "data": {
+                "messages": {
+                  "in/tenantId": "inputs/in/tenantId",
+                  "in/type": "BANK"
+                },
+                "transform": "./transformers#accountsToSelectArray"
+              }
+            }
+          },
+          "prepaymentLineAccount": {
+            "type": "text",
+            "label": "Prepayment Line Account",
+            "index": 4,
+            "tooltip": "Select the Xero account used to code the prepayment line item.",
+            "source": {
+              "url": "/component/appmixer/xero/accounting/ListAccounts?outPort=accounts",
+              "data": {
+                "messages": {
+                  "in/tenantId": "inputs/in/tenantId"
+                },
+                "transform": "./transformers#accountsToIdCodeSelectArray"
+              }
+            }
+          },
+          "amount": {
+            "type": "number",
+            "label": "Amount",
+            "index": 5
+          },
+          "date": {
+            "type": "date-time",
+            "label": "Date",
+            "index": 6,
+            "config": {
+              "enableTime": false,
+              "format": "YYYY-MM-DD"
+            }
+          },
+          "reference": {
+            "type": "text",
+            "label": "Reference",
+            "index": 7
+          }
+        }
+      }
+    }
+  ],
+  "outPorts": [
+    {
+      "name": "out",
+      "options": [
+        {
+          "label": "Prepayment ID",
+          "value": "prepaymentId",
+          "schema": {
+            "type": "string",
+            "example": "b5f0d2f7-0f26-4a9d-a8df-cfb0ccf1a8b3"
+          }
+        },
+        {
+          "label": "Bank Transaction ID",
+          "value": "bankTransactionId",
+          "schema": {
+            "type": "string",
+            "example": "89acff45-5c19-4d8c-aa57-2b62c05d8b2c"
+          }
+        },
+        {
+          "label": "Result",
+          "value": "result",
+          "schema": {
+            "type": "object",
+            "properties": {},
+            "example": {
+              "BankTransactions": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
