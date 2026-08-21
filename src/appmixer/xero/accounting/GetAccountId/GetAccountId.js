@@ -48,7 +48,8 @@ module.exports = {
         const accountCode = selectedAccount.accountCode;
 
         requireInput(context, accountId, 'Account ID');
-        requireInput(context, accountCode, 'Account Code');
+        //account codes can be empty
+        //requireInput(context, accountCode, 'Account Code');
 
         return context.sendJson({
             accountId,
