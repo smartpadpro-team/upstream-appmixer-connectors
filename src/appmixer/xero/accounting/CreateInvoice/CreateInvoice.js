@@ -67,7 +67,8 @@ module.exports = {
 
         } catch (e) {
             // If the value is not a valid JSON, throw an error.
-            const errorMessage = e.message ?? 'Error encountered creating the invoice in Xero';
+            const xeroErrorMessage = e.Elements?.[0]?.ValidationErrors?.[0]?.Message ?? e.message;
+            const errorMessage = xeroErrorMessage ?? 'Error encountered creating the invoice in Xero';
             return context.sendJson({
                 message: errorMessage
             }, 'error');
