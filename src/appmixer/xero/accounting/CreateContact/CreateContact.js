@@ -75,7 +75,8 @@ module.exports = {
             return context.sendJson(Contacts[0], 'out');
         } catch (e) {
             // If the value is not a valid JSON, throw an error.
-            const errorMessage = e.message ?? 'Error encountered creating contact in XERO';
+            const xeroErrorMessage = e.Elements?.[0]?.ValidationErrors?.[0]?.Message ?? e.message;
+            const errorMessage = xeroErrorMessage ?? 'Error encountered creating contact in XERO';
             return context.sendJson({
                 message: errorMessage
             }, 'error');
