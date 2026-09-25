@@ -102,10 +102,21 @@ module.exports = {
             return context.sendJson(response.data?.Invoice, 'out');
         } catch (e) {
             // If the value is not a valid JSON, throw an error.
-            const errorMessage = e.message ?? 'Error encountered creating invoice in Quickbooks';
-            return context.sendJson({
-                message: errorMessage
-            }, 'error');
+            const errorData = e?.response?.data ?? e?.data ?? e;
+            const qbErrors =
+                errorData?.response?.Fault?.Error ??
+                errorData?.Fault?.Error;
+
+            const errorMessage =
+                qbErrors
+                    ?.map(error => error?.Detail || error?.Message)
+                    .filter(Boolean)
+                    .join('; ') ||
+                errorData?.message ||
+                e?.message ||
+                'Error encountered creating invoice in QuickBooks';
+
+            return context.sendJson({ message: errorMessage }, 'error');
         }
     }
 };
