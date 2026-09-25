@@ -11,7 +11,6 @@ module.exports = {
 
         const { minorVersion } = context.messages.in.content;
 
-        // Log warning for deprecated minor versions
         await logDeprecatedMinorVersion(context, minorVersion);
 
         const options = {
@@ -19,7 +18,13 @@ module.exports = {
             method: 'GET'
         };
         const response = await makeRequest({ context, options });
-
-        return context.sendJson(response.data?.CompanyInfo, 'out');
+        const companyInfo = response.data?.CompanyInfo;
+        return context.sendJson(
+            {
+                ...companyInfo,
+                realmId:context.profileInfo.companyId
+            },
+            'out'
+        );
     }
 };
