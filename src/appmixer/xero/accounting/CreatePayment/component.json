@@ -6,7 +6,8 @@
   "auth": {
     "service": "appmixer:xero",
     "scope": [
-      "accounting.transactions"
+      "accounting.invoices",
+      "accounting.payments"
     ]
   },
   "inPorts": [

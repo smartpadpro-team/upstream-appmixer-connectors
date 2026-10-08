@@ -6,7 +6,7 @@
     "version": "1.0.1",
     "auth": {
         "service": "appmixer:xero",
-        "scope": ["accounting.transactions"]
+        "scope": ["accounting.invoices"]
     },
     "inPorts": [
         {
