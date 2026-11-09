@@ -1,7 +1,6 @@
 'use strict';
 
 const Hubspot = require('./Hubspot');
-const { getObjectProperties } = require('./commons');
 
 class BaseSubscriptionComponent {
 
@@ -17,7 +16,11 @@ class BaseSubscriptionComponent {
         this.hubspot.setApiKey(config.apiKey);
         this.hubspot.setAppId(config.appId);
         this.hubspot.setToken(auth.accessToken);
-        this.hubspot.setHttpRequest(context.httpRequest);
+    }
+
+    getSubscriptions(context) {
+
+        throw new Error('Must be extended to return subscriptions');
     }
 
     async ensureWebhook(context) {
@@ -75,11 +78,20 @@ class BaseSubscriptionComponent {
             context.log({ step: 'hubspot-plugin-error', status, code: error.code, error });
             if (status === 404) {
                 // Webhook not found, need to register
-                context.log({ step: 'hubspot-plugin-webhook-not-found-registering', message: `Registering webhook with target URL ${targetURL}` });
+                context.log({
+                    step: 'hubspot-plugin-webhook-not-found-registering',
+                    message: `Registering webhook with target URL ${targetURL}`
+                });
                 await this.hubspot.registerWebhook(targetURL);
             } else {
                 // Unexpected error - propagate and fail the startup
-                context.log({ step: 'hubspot-plugin-error-while-fetching-webhook-settings', status, code: error.code, error, message: `Failed to set up webhook with target URL ${targetURL}` });
+                context.log({
+                    step: 'hubspot-plugin-error-while-fetching-webhook-settings',
+                    status,
+                    code: error.code,
+                    error,
+                    message: `Failed to set up webhook with target URL ${targetURL}`
+                });
                 throw new context.CancelError(`Error while fetching webhook settings: ${error.message}`);
             }
         } finally {
@@ -101,94 +113,19 @@ class BaseSubscriptionComponent {
 
         await this.ensureWebhook(context);
 
-        return this.registerListener(context);
-    }
-
-    /**
-     * Registers the listener for `<subscriptionType>:<portalId>`. The portal is the portal of the access
-     * token, not profileInfo.hub_id: an account holds a token per consent and each consent can pick
-     * a different portal, so profileInfo (stored on the first consent) can name a portal whose events
-     * this token never sees. The portal is kept in the state so stop() removes the same listener.
-     */
-    async registerListener(context, params = {}) {
-
-        const portalId = await this.getTokenPortalId(context);
-        await context.stateSet('portalId', portalId);
-        // The access token lets the plugin (AuthHub) verify that portalId is the account's own portal.
+        // Use hub_id from context to differentiate between different HubSpot portals/users.
+        const portalId = context.auth?.profileInfo?.hub_id;
         return context.addListener(`${this.subscriptionType}:${portalId}`, {
             apiKey: context.config.apiKey,
-            appId: context.config.appId,
-            ...params,
-            accessToken: context.auth?.accessToken
+            appId: context.config.appId
         });
-    }
-
-    async getTokenPortalId(context) {
-
-        const fallback = context.auth?.profileInfo?.hub_id;
-        try {
-            // The same endpoint the auth module reads profileInfo (hub_id) from.
-            const { data } = await context.httpRequest({
-                method: 'GET',
-                url: `https://api.hubapi.com/oauth/v1/access-tokens/${encodeURIComponent(context.auth?.accessToken)}`
-            });
-            return data?.hub_id ?? fallback;
-        } catch (err) {
-            // Never log the error object: the request URL contains the token.
-            const status = err?.response?.status ?? err?.status;
-            context.log({ step: 'hubspot-token-portal-lookup-failed', status, fallbackPortalId: fallback });
-            return fallback;
-        }
     }
 
     async stop(context) {
 
         this.configureHubspot(context);
-        const portalId = await context.stateGet('portalId') ?? context.auth?.profileInfo?.hub_id;
+        const portalId = context.auth?.profileInfo?.hub_id;
         return context.removeListener(`${this.subscriptionType}:${portalId}`);
-    }
-
-    /**
-     * Flow Test Mode helper shared by every subscription trigger's test(). Fetches the
-     * newest object of `objectType` via the CRM search API and emits it on `outputPort`
-     * in the SAME shape receive() emits (an element of a batch/read result:
-     * { id, properties, createdAt, updatedAt, archived }). Honors the same `properties`
-     * selection as receive(); callers pass any property filters (pipeline, dealstage)
-     * so the example matches the trigger's configuration.
-     * @param {string} objectType 'contacts' | 'deals'
-     * @param {object} [opts]
-     * @param {string} [opts.sortProperty] property to sort newest-first ('createdate' by default)
-     * @param {object[]} [opts.filters] HubSpot search filters ({ propertyName, operator, value })
-     * @returns {Promise<object>} The newest record.
-     */
-    async fetchLatestExample(context, objectType, { sortProperty = 'createdate', filters = [] } = {}) {
-
-        this.configureHubspot(context);
-
-        let propertiesToReturn;
-        const { properties } = context.properties;
-        if (!properties) {
-            propertiesToReturn = await getObjectProperties(context, this.hubspot, objectType, 'names');
-        } else {
-            propertiesToReturn = properties.split(',');
-        }
-
-        const body = {
-            sorts: [{ propertyName: sortProperty, direction: 'DESCENDING' }],
-            properties: propertiesToReturn,
-            limit: 1
-        };
-        if (filters.length) {
-            body.filterGroups = [{ filters }];
-        }
-
-        const { data } = await this.hubspot.call('post', `crm/v3/objects/${objectType}/search`, body);
-        const record = data.results && data.results[0];
-        if (!record) {
-            throw new context.CancelError(`No ${objectType} found to use as test data.`);
-        }
-
-        return record;
     }
 }
 

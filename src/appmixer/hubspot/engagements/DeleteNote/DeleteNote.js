@@ -5,12 +5,8 @@ module.exports = {
     async receive(context) {
         const { noteId } = context.messages.in.content;
 
-        if (!noteId) {
-            throw new context.CancelError('Note ID is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         // https://developers.hubspot.com/docs/api/crm/notes
         await hs.call('delete', `crm/v3/objects/notes/${noteId}`);

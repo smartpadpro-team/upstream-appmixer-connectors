@@ -9,15 +9,8 @@ module.exports = {
             hsNoteBody
         } = context.messages.in.content;
 
-        if (!noteId) {
-            throw new context.CancelError('Note ID is required!');
-        }
-        if (!hsNoteBody) {
-            throw new context.CancelError('Note Body is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         const payload = {
             properties: {
@@ -25,6 +18,8 @@ module.exports = {
                 hs_note_body: hsNoteBody
             }
         };
+
+        context.log({ stage: 'Engagements - UpdateNote payload', payload });
 
         const { data } = await hs.call(
             'patch',

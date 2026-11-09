@@ -17,18 +17,8 @@ module.exports = {
             hsEmailHeaders
         } = context.messages.in.content;
 
-        if (!contactId) {
-            throw new context.CancelError('Contact ID is required!');
-        }
-        if (!hsTimestamp) {
-            throw new context.CancelError('Timestamp is required!');
-        }
-        if (!hsEmailDirection) {
-            throw new context.CancelError('Email Direction is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         const payload = {
             properties: {
@@ -56,6 +46,8 @@ module.exports = {
                 }
             ]
         };
+
+        context.log({ stage: 'Engagements - CreateEmail payload ', payload });
 
         const { data } = await hs.call(
             'post',

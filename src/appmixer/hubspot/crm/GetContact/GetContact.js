@@ -1,10 +1,7 @@
 'use strict';
 const Hubspot = require('../../Hubspot');
-const ITEM_SCHEMA = require('../../item-schemas.json').contact;
 
 module.exports = {
-
-    ITEM_SCHEMA,
 
     async receive(context) {
 
@@ -16,7 +13,7 @@ module.exports = {
         } = context.messages.in.content;
 
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
         const params = {
             properties: properties || '',
             associations: associations || [],

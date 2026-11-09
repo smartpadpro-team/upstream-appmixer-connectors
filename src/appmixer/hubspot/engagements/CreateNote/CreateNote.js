@@ -10,18 +10,8 @@ module.exports = {
             hsNoteBody
         } = context.messages.in.content;
 
-        if (!objectId) {
-            throw new context.CancelError('Associated Object ID is required!');
-        }
-        if (!hsNoteBody) {
-            throw new context.CancelError('Note Body is required!');
-        }
-        if (!associationTypeId) {
-            throw new context.CancelError('Association Type is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         const payload = {
             properties: {
@@ -42,13 +32,14 @@ module.exports = {
             ]
         };
 
+        context.log({ stage: 'Engagements - CreateNote payload', payload });
+
         const { data } = await hs.call(
             'post',
             'crm/v3/objects/notes',
             payload
         );
 
-        // The create response carries no associations, so echo the association type back.
-        return context.sendJson({ ...data, associationTypeId }, 'out');
+        return context.sendJson(data, 'out');
     }
 };

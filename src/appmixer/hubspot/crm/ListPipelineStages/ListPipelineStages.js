@@ -15,9 +15,15 @@ module.exports = {
         }
 
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         const objectType = 'deals';
+
+        await context.log({
+            step: 'request',
+            accessToken: auth.accessToken,
+            url: `crm/v3/pipelines/${objectType}/${pipelineId}/stages`
+        });
 
         try {
             const { data } = await hs.call('get', `crm/v3/pipelines/${objectType}/${pipelineId}/stages`);

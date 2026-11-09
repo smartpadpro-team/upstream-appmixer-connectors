@@ -18,12 +18,8 @@ module.exports = {
             zip
         } = context.messages.in.content;
 
-        if (!email) {
-            throw new context.CancelError('Email is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         const additionalPropertiesArray = context.messages.in.content.additionalProperties?.AND || [];
         const additionalProperties = additionalPropertiesArray.reduce((acc, field) => {

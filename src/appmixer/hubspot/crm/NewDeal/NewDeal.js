@@ -1,11 +1,20 @@
 'use strict';
 const BaseSubscriptionComponent = require('../../BaseSubscriptionComponent');
 const { getObjectProperties } = require('../../commons');
-const ITEM_SCHEMA = require('../../item-schemas.json').deal;
 
 const subscriptionType = 'deal.creation';
 
 class NewDeal extends BaseSubscriptionComponent {
+
+    getSubscriptions() {
+
+        return [{
+            enabled: true,
+            subscriptionDetails: {
+                subscriptionType: this.subscriptionType
+            }
+        }];
+    }
 
     async receive(context) {
 
@@ -26,9 +35,7 @@ class NewDeal extends BaseSubscriptionComponent {
             });
 
             for (const [dealId] of Object.entries(eventsByObjectId)) {
-                // Scope the dedupe key per component instance — staticCache is shared across all
-                // instances, so two flows must not consume each other's events.
-                const cacheKey = `hubspot-deal-created-${context.componentId}-${dealId}`;
+                const cacheKey = 'hubspot-deal-created-' + dealId;
                 const cached = await context.staticCache.get(cacheKey);
                 if (cached) {
                     continue;
@@ -61,32 +68,10 @@ class NewDeal extends BaseSubscriptionComponent {
             properties: propertiesToReturn
         });
 
-        const { pipeline: filterPipeline } = context.properties;
-
-        let results = data.results;
-        if (filterPipeline) {
-            results = results.filter(deal => deal.properties?.pipeline === filterPipeline);
-        }
-
-        await context.sendArray(results, 'deal');
+        await context.sendArray(data.results, 'deal');
 
         return context.response();
-    }
-
-    async test(context) {
-
-        const { pipeline: filterPipeline } = context.properties;
-        const filters = [];
-        if (filterPipeline) {
-            filters.push({ propertyName: 'pipeline', operator: 'EQ', value: filterPipeline });
-        }
-        const record = await this.fetchLatestExample(context, 'deals', { filters });
-        if (!record) {
-            throw new context.CancelError('No deal found to use as test data.');
-        }
-        return context.sendJson(record, 'deal');
     }
 }
 
 module.exports = new NewDeal(subscriptionType);
-module.exports.ITEM_SCHEMA = ITEM_SCHEMA;

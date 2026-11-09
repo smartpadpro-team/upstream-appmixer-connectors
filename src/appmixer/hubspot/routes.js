@@ -1,17 +1,7 @@
 'use strict';
 
-const { createHmac, timingSafeEqual } = require('node:crypto');
-const { DEFAULT_SUBSCRIBED_PROPERTIES_CONTACT, DEFAULT_SUBSCRIBED_PROPERTIES_DEAL } = require('./commons');
-
-// HubSpot recommends rejecting requests with a timestamp older than 5 minutes.
-// See https://developers.hubspot.com/docs/api/webhooks/validating-requests
-const MAX_SIGNATURE_AGE_MS = 5 * 60 * 1000;
-
-// Characters HubSpot URL-decodes in the request URI before computing the v3 signature.
-const URI_DECODE_MAP = {
-    '%3A': ':', '%2F': '/', '%3F': '?', '%40': '@', '%21': '!', '%24': '$',
-    '%27': '\'', '%28': '(', '%29': ')', '%2A': '*', '%2C': ',', '%3B': ';'
-};
+const _ = require('lodash');
+const { WATCHED_PROPERTIES_CONTACT, WATCHED_PROPERTIES_DEAL } = require('./commons');
 
 module.exports = async (context) => {
 
@@ -21,81 +11,56 @@ module.exports = async (context) => {
 
         /** Is this AuthHub or Engine pod? */
         const isAuthHubPod = !!process.env.AUTH_HUB_URL && !process.env.AUTH_HUB_TOKEN;
-        /** Tenant pod forwarding its listeners to the AuthHub: the AuthHub verifies the token. */
-        const isAuthHubTenantPod = !!process.env.AUTH_HUB_URL && !!process.env.AUTH_HUB_TOKEN;
-
-        if (!isAuthHubTenantPod) {
-            // Bind the listener to the HubSpot portal of the account that registers it, so that
-            // a registration can not name another portal and receive its events.
-            await verifyListenerPortal(context, listener);
-        }
-
         if (isAuthHubPod) {
-            // The AuthHub does not create subscriptions (see below), so the tenant's developer
-            // API key and app ID are not needed in the stored listener.
-            if (listener.params) {
-                delete listener.params.apiKey;
-                delete listener.params.appId;
-            }
-            // This is AuthHub — the shared app's subscriptions are configured manually in its HubSpot
-            // webhook settings, so there is nothing to register here.
+            // This is AuthHub, we don't need to create subscriptions here.
             return;
         }
 
         const { eventName, params } = listener;
-        const subscriptionType = eventName.split(':')[0];
-        const subscriptions = getSubscriptionsByType(subscriptionType, context, params);
-        if (!subscriptions?.length) {
-            return;
-        }
 
-        // Retry on lock contention. Each ContactPropertyChanged listener contributes a distinct
-        // propertyName, so two listeners of the same subscriptionType starting concurrently must not
-        // drop each other's subscription — wait for the lock instead of silently giving up.
-        let lock;
         try {
-            lock = await context.lock(eventName, {
-                ttl: 1000 * 30,
-                retryDelay: 500,
-                maxRetryCount: 20
-            });
+            const lock = await context.lock(eventName);
 
-            const results = await getHubSpotSubscriptions(context, params);
+            try {
+                const subscriptionType = eventName.split(':')[0];
+                const subscriptions = getSubscriptionsByType(subscriptionType, context);
+                const results = await getHubSpotSubscriptions(context, params);
+                const currentActiveSubs = results.filter(s => s.enabled).map(s => s.eventType);
 
-            // Reconcile on the full (eventType, propertyName) pair. HubSpot models each watched
-            // property as its own subscription, so comparing eventType alone would treat every
-            // propertyChange property as already-subscribed once any one of them exists.
-            const subKey = (eventType, propertyName) => `${eventType}:${propertyName || ''}`;
-            const existingByKey = new Map();
-            results.forEach(r => existingByKey.set(subKey(r.eventType, r.propertyName), r));
+                let subscriptionsToCreate = [];
+                subscriptions.forEach(s => {
+                    if (!currentActiveSubs.includes(s.subscriptionDetails.subscriptionType)) {
+                        subscriptionsToCreate.push(s);
+                    }
+                });
 
-            const subscriptionsToCreate = [];
-            for (const sub of subscriptions) {
-                const { subscriptionType: evType, propertyName } = sub.subscriptionDetails;
-                const existing = existingByKey.get(subKey(evType, propertyName));
-                // The v3 subscriptions API reports the state as `active` (v1 used `enabled`).
-                const isActive = existing ? (existing.active ?? existing.enabled) : undefined;
-                if (!existing) {
-                    subscriptionsToCreate.push(sub);
-                } else if (isActive === false) {
-                    // Re-enable a disabled subscription for this exact property — don't stop at the
-                    // first one, every desired property must end up active.
-                    await activateHubSpotSubscription(context, params, existing.id);
+                if (!subscriptionsToCreate.length) {
+                    return {};
                 }
-            }
 
-            if (subscriptionsToCreate.length) {
+                // If deletion or creation, check if we need to enable or create the subscription
+                for (const sub of subscriptionsToCreate) {
+                    const existingSub = results.find(r => r.eventType === sub.subscriptionDetails.subscriptionType);
+                    if (existingSub) {
+                        // Enable the existing subscription
+                        await activateHubSpotSubscription(context, params, existingSub.id);
+                        return;
+                    }
+                }
+
                 const { data } = await createHubSpotSubscriptions(context, params, subscriptionsToCreate);
                 return data;
+
+            } catch (err) {
+                context.log('error', 'hubspot-plugin-listener-added-error', { listener, error: err.message });
+                throw err;
+            } finally {
+                await lock.unlock();
             }
-
-            return {};
-
         } catch (err) {
-            context.log('error', 'hubspot-plugin-listener-added-error', { listener, error: err.message });
-            throw err;
-        } finally {
-            await lock?.unlock();
+            if (err.message !== 'locked') {
+                throw err;
+            }
         }
     });
 
@@ -105,32 +70,15 @@ module.exports = async (context) => {
         path: '/events',
         options: {
             auth: false,
-            // The raw body is needed to verify the X-HubSpot-Signature-v3 header.
-            payload: {
-                parse: false
-            },
-            handler: async (req, h) => {
+            handler: async (req) => {
 
-                const rawBody = Buffer.isBuffer(req.payload) ? req.payload.toString('utf8') : (req.payload || '');
-                if (!verifySignature(context, req, rawBody)) {
-                    return h.response({ error: 'Invalid signature.' }).code(401);
-                }
-
-                let payload;
-                try {
-                    payload = rawBody ? JSON.parse(rawBody) : undefined;
-                } catch (err) {
-                    context.log('error', 'hubspot-plugin-route-webhook-invalid-payload', { error: err.message });
-                    return h.response({ error: 'Invalid payload.' }).code(400);
-                }
-
-                await context.log('info', 'hubspot-plugin-route-webhook-hit', { eventCount: payload?.length });
-                context.log('trace', 'hubspot-plugin-route-webhook-payload', { payload });
-                if (!payload || typeof payload !== 'object') {
+                await context.log('info', 'hubspot-plugin-route-webhook-hit', { eventCount: req.payload?.length });
+                context.log('trace', 'hubspot-plugin-route-webhook-payload', { payload: req.payload });
+                if (!req.payload || typeof req.payload !== 'object') {
                     context.log('warn', 'hubspot-plugin-route-webhook-missing-payload');
                     return {};
                 }
-                const events = Array.isArray(payload) ? payload : [payload];
+                const events = Array.isArray(req.payload) ? req.payload : [req.payload];
                 if (!Array.isArray(events) || !events.length) {
                     return {};
                 }
@@ -139,22 +87,33 @@ module.exports = async (context) => {
 
                 // Portal ID (hub_id) is the same for all events.
                 const portalId = events[0].portalId;
-                const eventsBySubscriptionType = {};
-                for (const event of events) {
-                    (eventsBySubscriptionType[event.subscriptionType] ||= []).push(event);
-                }
+                const eventsBySubscriptionType = _.groupBy(events, 'subscriptionType');
 
                 // Note on batching: The batch size can vary, but will be under 100 notifications.
                 // See: https://legacydocs.hubspot.com/docs/methods/webhooks/webhooks-overview
                 for (const [subscriptionType, subscriptionEvents] of Object.entries(eventsBySubscriptionType)) {
-                    // Pass all events through — no property allowlist filtering here.
-                    // The false-trigger problem (creation also firing update) is handled downstream
-                    // in triggerListenersDelayed(), which checks if the object was just created
-                    // and skips propertyChange events that arrived within the same creation window.
-                    // Filtering here would silently drop any property not in the hardcoded list
-                    // (e.g. lifecyclestage, custom properties), breaking user-configured subscriptions.
-                    const filteredEvents = [...subscriptionEvents];
-                    const eventsByObjectId = groupEventsByObjectId(filteredEvents);
+                    // Skipping propertyChange events for properties that are not watched.
+                    const filteredEvents = [];
+                    if (subscriptionType.endsWith('propertyChange')) {
+                        let watchedProperties = [];
+                        if (subscriptionType === 'deal.propertyChange') {
+                            watchedProperties = WATCHED_PROPERTIES_DEAL;
+                        } else if (subscriptionType === 'contact.propertyChange') {
+                            watchedProperties = WATCHED_PROPERTIES_CONTACT;
+                        } else {
+                            throw new Error(`Unsupported subscriptionType: ${subscriptionType}`);
+                        }
+
+                        subscriptionEvents.forEach(event => {
+                            if (watchedProperties.includes(event.propertyName)) {
+                                filteredEvents.push(event);
+                            }
+                        });
+                    } else {
+                        // For creation events, we don't need to filter.
+                        filteredEvents.push(...subscriptionEvents);
+                    }
+                    const eventsByObjectId = _.keyBy(filteredEvents, 'objectId');
                     const objectIds = Object.keys(eventsByObjectId);
                     if (!objectIds.length) {
                         continue;
@@ -195,215 +154,49 @@ module.exports = async (context) => {
     });
 };
 
-/**
- * Checks that the portal in the listener's event name (`<subscriptionType>:<portalId>`) is the portal
- * of the access token the component sent in `params.accessToken`. Throws (403) on a mismatch.
- * The token is removed from the params before the listener is stored and is never logged.
- *
- * Transition: listeners registered by older connector versions carry no token. They are accepted
- * with a warning unless the connector setting `requireListenerAccessToken` is set, then rejected.
- */
-async function verifyListenerPortal(context, listener) {
-
-    const params = listener.params || {};
-    const accessToken = params.accessToken;
-    delete params.accessToken;
-
-    const eventName = listener.eventName || '';
-    const portalId = eventName.split(':')[1];
-
-    if (!accessToken) {
-        if (isTruthy(context.config?.requireListenerAccessToken)) {
-            context.log('error', 'hubspot-plugin-listener-added-missing-token-rejected', { eventName });
-            throw forbidden('HubSpot listener registration rejected: missing access token.');
-        }
-        context.log('warn', 'hubspot-plugin-listener-added-missing-token', { eventName });
-        return;
-    }
-
-    let tokenPortalId;
-    try {
-        // The same endpoint the auth module reads profileInfo (hub_id) from (auth.js requestProfileInfo).
-        const { data } = await context.httpRequest({
-            method: 'GET',
-            url: `https://api.hubapi.com/oauth/v1/access-tokens/${encodeURIComponent(accessToken)}`
-        });
-        tokenPortalId = data?.hub_id;
-    } catch (err) {
-        // Never log the error object: the request URL contains the token.
-        const status = err?.response?.status ?? err?.status;
-        context.log('error', 'hubspot-plugin-listener-added-token-lookup-failed', { eventName, status });
-        throw forbidden('HubSpot listener registration rejected: the access token could not be verified.');
-    }
-
-    if (tokenPortalId === undefined || tokenPortalId === null || String(tokenPortalId) !== String(portalId)) {
-        context.log('error', 'hubspot-plugin-listener-added-portal-mismatch', { eventName, tokenPortalId });
-        throw forbidden('HubSpot listener registration rejected: the portal does not match the account.');
-    }
-}
-
-function forbidden(message) {
-
-    const error = new Error(message);
-    error.statusCode = 403;
-    error.status = 403;
-    return error;
-}
-
-function isTruthy(value) {
-
-    return value === true || value === 'true' || value === '1' || value === 1;
-}
-
-// Verifies the X-HubSpot-Signature-v3 header: base64 HMAC-SHA256 of method + URI + raw body + timestamp,
-// keyed with the app's client secret. Requests without a valid, recent signature are rejected.
-function verifySignature(context, req, rawBody) {
-
-    const clientSecret = context.config?.clientSecret;
-    if (!clientSecret) {
-        context.log('error', 'hubspot-plugin-route-webhook-missing-client-secret');
-        return false;
-    }
-
-    const signature = req.headers?.['x-hubspot-signature-v3'];
-    const timestamp = req.headers?.['x-hubspot-request-timestamp'];
-    if (!signature || !timestamp) {
-        context.log('error', 'hubspot-plugin-route-webhook-missing-signature');
-        return false;
-    }
-
-    if (!(Math.abs(Date.now() - Number(timestamp)) <= MAX_SIGNATURE_AGE_MS)) {
-        context.log('error', 'hubspot-plugin-route-webhook-expired-timestamp', { timestamp });
-        return false;
-    }
-
-    const method = (req.method || 'POST').toUpperCase();
-    const valid = getRequestUris(context, req).some(uri => {
-        const expected = createHmac('sha256', clientSecret)
-            .update(`${method}${uri}${rawBody}${timestamp}`)
-            .digest('base64');
-        return safeEqual(expected, signature);
-    });
-
-    if (!valid) {
-        context.log('error', 'hubspot-plugin-route-webhook-invalid-signature');
-    }
-    return valid;
-}
-
-// The signed URI is the full URL HubSpot called. Behind a proxy the URL seen by the server can differ,
-// so accept the public Appmixer API URL as well as the URL rebuilt from the (forwarded) request headers.
-function getRequestUris(context, req) {
-
-    const pathWithQuery = (req.url?.pathname || req.path || '') + (req.url?.search || '');
-    const uris = [];
-
-    if (context.appmixerApiUrl) {
-        uris.push(context.appmixerApiUrl.replace(/\/+$/, '') + pathWithQuery);
-    }
-
-    const headers = req.headers || {};
-    const protocol = (headers['x-forwarded-proto'] || '').split(',')[0].trim()
-        || (req.url?.protocol || '').replace(':', '');
-    const host = (headers['x-forwarded-host'] || '').split(',')[0].trim() || headers.host || req.url?.host;
-    if (protocol && host) {
-        uris.push(`${protocol}://${host}${pathWithQuery}`);
-    }
-
-    return [...new Set(uris)].map(uri => uri.replace(/%(3A|2F|3F|40|21|24|27|28|29|2A|2C|3B)/gi, match => {
-        return URI_DECODE_MAP[match.toUpperCase()];
-    }));
-}
-
-function safeEqual(a, b) {
-
-    const bufferA = Buffer.from(String(a));
-    const bufferB = Buffer.from(String(b));
-    return bufferA.length === bufferB.length && timingSafeEqual(bufferA, bufferB);
-}
-
 // Trigger listeners after 5 seconds. This is to avoid duplicate events.
 // See https://github.com/clientIO/appmixer-components/issues/1700#issuecomment-2605687394
 async function triggerListenersDelayed(context, eventName, payload) {
 
-    // If this is an update event, filter out per-objectId any objects that were just created.
-    // HubSpot sends propertyChange events alongside a creation event for the same object —
-    // we skip only those specific objects, not the entire payload.
+    // If this is an update event, check if the object was created in the last 5 seconds
+    // If it was, skip the update event
     if (eventName.includes('.propertyChange:')) {
+        const objectId = Object.keys(payload)[0];
         const subscriptionType = eventName.split(':')[0];
         const subscriptionTypeCreated = subscriptionType.replace('.propertyChange', '.creation');
         const portalId = eventName.split(':')[1];
-
-        const filteredPayload = {};
-        for (const [objectId, event] of Object.entries(payload)) {
-            // Looking for the created timestamp in the database for the same object.
-            const createdTimestamp = await context.service.stateGet(`${portalId}:${subscriptionTypeCreated}:${objectId}`);
-            if (createdTimestamp && event.occurredAt <= createdTimestamp) {
-                // This propertyChange arrived with a creation event — skip this object only.
-                continue;
-            }
-            filteredPayload[objectId] = event;
-        }
-
-        if (!Object.keys(filteredPayload).length) {
+        // Looking for the created timestamp in the database for the same object.
+        const createdTimestamp = await context.service.stateGet(`${portalId}:${subscriptionTypeCreated}:${objectId}`);
+        if (createdTimestamp && payload[objectId].occurredAt <= createdTimestamp) {
+            // This is an update event for an object that was created in the last 5 seconds.
             return;
         }
-
-        await context.triggerListeners({ eventName, payload: filteredPayload });
-        return;
     }
 
     await context.triggerListeners({ eventName, payload });
 }
 
-// One entry per object, the last event wins (as HubSpot batches arrive in order). For propertyChange
-// events, `propertyNames` lists every property of the object that changed in this batch — a single batch
-// can carry several changes of the same object, and triggers that filter by property must see all of them.
-function groupEventsByObjectId(events) {
-
-    const eventsByObjectId = {};
-    for (const event of events) {
-        if (!event.propertyName) {
-            eventsByObjectId[event.objectId] = event;
-            continue;
-        }
-        const propertyNames = [...(eventsByObjectId[event.objectId]?.propertyNames || [])];
-        if (!propertyNames.includes(event.propertyName)) {
-            propertyNames.push(event.propertyName);
-        }
-        eventsByObjectId[event.objectId] = { ...event, propertyNames };
-    }
-    return eventsByObjectId;
-}
-
-// HubSpot has no "any property" subscription — every watched property is its own subscription, shared by
-// all portals that installed the app (max 1000 per app). Register the defaults plus the property a
-// ContactPropertyChanged trigger asks for (`propertyName`).
-function propertyChangeSubscriptions(subscriptionType, defaultProperties, params = {}) {
-
-    const propertySet = new Set(defaultProperties);
-    if (params.propertyName) {
-        propertySet.add(params.propertyName);
-    }
-
-    return Array.from(propertySet).map(propertyName => ({
-        enabled: true,
-        subscriptionDetails: {
-            subscriptionType,
-            propertyName
-        }
-    }));
-}
-
-function getSubscriptionsByType(subscriptionType, context, params = {}) {
+function getSubscriptionsByType(subscriptionType, context) {
 
     let subscriptions = [];
 
     if (subscriptionType === 'deal.propertyChange') {
-        subscriptions = propertyChangeSubscriptions(subscriptionType, DEFAULT_SUBSCRIBED_PROPERTIES_DEAL, params);
+        subscriptions = WATCHED_PROPERTIES_DEAL.map(propertyName => ({
+            enabled: true,
+            subscriptionDetails: {
+                subscriptionType,
+                propertyName
+            }
+        }));
     } else if (subscriptionType === 'contact.propertyChange') {
-        subscriptions = propertyChangeSubscriptions(subscriptionType, DEFAULT_SUBSCRIBED_PROPERTIES_CONTACT, params);
-    } else if (subscriptionType === 'contact.creation' || subscriptionType === 'deal.creation') {
+        subscriptions = WATCHED_PROPERTIES_CONTACT.map(propertyName => ({
+            enabled: true,
+            subscriptionDetails: {
+                subscriptionType,
+                propertyName
+            }
+        }));
+    } else if (subscriptionType === 'contact.creation' || subscriptionType === 'deal.creation' || subscriptionType === 'object.creation') {
         subscriptions = [{
             enabled: true,
             subscriptionDetails: { subscriptionType }
@@ -429,7 +222,7 @@ async function getHubSpotSubscriptions(context, hubspot) {
     });
 
     if (data?.ok === false) {
-        throw new Error(data?.error);
+        throw new Error(response?.data?.error);
     }
 
     return data.results;
@@ -444,7 +237,7 @@ async function createHubSpotSubscriptions(context, hubspot, subscriptions) {
     });
 
     if (result.data?.ok === false) {
-        throw new Error(result.data?.error);
+        throw new Error(response?.data?.error);
     }
 
     return result;
@@ -455,12 +248,11 @@ async function activateHubSpotSubscription(context, hubspot, subscriptionId) {
     const result = await context.httpRequest({
         method: 'PATCH',
         url: `https://api.hubapi.com/webhooks/v3/${hubspot.appId}/subscriptions/${subscriptionId}?hapikey=${hubspot.apiKey}`,
-        // v3 takes `active` — `enabled` is silently ignored and the subscription stays off.
-        data: { active: true }
+        data: { enabled: true }
     });
 
     if (result.data?.ok === false) {
-        throw new Error(result.data?.error);
+        throw new Error(response?.data?.error);
     }
 
     return result;

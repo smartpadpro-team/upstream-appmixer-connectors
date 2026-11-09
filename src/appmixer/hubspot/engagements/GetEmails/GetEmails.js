@@ -9,7 +9,7 @@ module.exports = {
         } = context.messages.in.content;
 
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
         const idsArray = ids ? ids.split(',') : [];
 
         const payload = {
@@ -18,6 +18,8 @@ module.exports = {
             }),
             'properties': properties ? properties.split(',') : []
         };
+
+        context.log({ stage: 'Engagements - GetEmails payload ', payload });
 
         const { data } = await hs.call(
             'post',

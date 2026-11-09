@@ -1,11 +1,22 @@
 'use strict';
 const BaseSubscriptionComponent = require('../../BaseSubscriptionComponent');
-const { getObjectProperties } = require('../../commons');
-const ITEM_SCHEMA = require('../../item-schemas.json').deal;
+const { WATCHED_PROPERTIES_DEAL, getObjectProperties } = require('../../commons');
 
 const subscriptionType = 'deal.propertyChange';
 
 class UpdatedDeal extends BaseSubscriptionComponent {
+
+    getSubscriptions() {
+
+        const subscriptions = WATCHED_PROPERTIES_DEAL.map((propertyName) => ({
+            enabled: true,
+            subscriptionDetails: {
+                subscriptionType,
+                propertyName
+            }
+        }));
+        return subscriptions;
+    }
 
     async receive(context) {
 
@@ -24,16 +35,19 @@ class UpdatedDeal extends BaseSubscriptionComponent {
             });
 
             for (const [dealId, event] of Object.entries(eventsByObjectId)) {
-                // Scope the dedupe key per component instance — staticCache is shared across all
-                // instances, so two flows must not consume each other's events.
-                const cacheKey = `hubspot-deal-updated-${context.componentId}-${dealId}`;
-                const cached = await context.staticCache.get(cacheKey);
-                if (cached && event.occurredAt <= cached) {
-                    continue;
+                const cacheKey = 'hubspot-deal-updated-' + dealId;
+                // Only track changes in these properties. These are the ones present in the CreateDeal inspector.
+                // Even if we limit the subscriptions for these properties only, we need this for flows that
+                // are already running and all the subscriptions.
+                if (WATCHED_PROPERTIES_DEAL.includes(event.propertyName)) {
+                    const cached = await context.staticCache.get(cacheKey);
+                    if (cached && event.occurredAt <= cached) {
+                        continue;
+                    }
+                    // Cache the event for 5s to avoid duplicates
+                    await context.staticCache.set(cacheKey, event.occurredAt, context.config?.eventCacheTTL || 5000);
+                    events[dealId] = { occurredAt: event.occurredAt };
                 }
-                // Cache the event for 5s to avoid duplicates
-                await context.staticCache.set(cacheKey, event.occurredAt, context.config?.eventCacheTTL || 5000);
-                events[dealId] = { occurredAt: event.occurredAt };
             }
         } finally {
             await lock?.unlock();
@@ -60,19 +74,9 @@ class UpdatedDeal extends BaseSubscriptionComponent {
             properties: propertiesToReturn
         });
 
-        const { pipeline: filterPipeline, dealstage: filterStage } = context.properties;
-
         const results = [];
         data.results.forEach((deal) => {
             if (deal.updatedAt !== deal.createdAt) {
-                // Filter by pipeline if configured
-                if (filterPipeline && deal.properties?.pipeline !== filterPipeline) {
-                    return;
-                }
-                // Filter by deal stage if configured
-                if (filterStage && deal.properties?.dealstage !== filterStage) {
-                    return;
-                }
                 results.push(deal);
             }
         });
@@ -81,24 +85,6 @@ class UpdatedDeal extends BaseSubscriptionComponent {
 
         return context.response();
     }
-
-    async test(context) {
-
-        const { pipeline: filterPipeline, dealstage: filterStage } = context.properties;
-        const filters = [];
-        if (filterPipeline) {
-            filters.push({ propertyName: 'pipeline', operator: 'EQ', value: filterPipeline });
-        }
-        if (filterStage) {
-            filters.push({ propertyName: 'dealstage', operator: 'EQ', value: filterStage });
-        }
-        const record = await this.fetchLatestExample(context, 'deals', { sortProperty: 'lastmodifieddate', filters });
-        if (!record) {
-            throw new context.CancelError('No deal found to use as test data.');
-        }
-        return context.sendJson(record, 'deal');
-    }
 }
 
 module.exports = new UpdatedDeal(subscriptionType);
-module.exports.ITEM_SCHEMA = ITEM_SCHEMA;

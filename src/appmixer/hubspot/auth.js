@@ -10,10 +10,10 @@ module.exports = {
 
         scope: [
             'oauth',
+            'files',
+            'forms-uploaded-files',
             'tickets',
-            'automation',
             'e-commerce',
-            'forms',
             'timeline',
             'media_bridge.read',
             'crm.lists.read',

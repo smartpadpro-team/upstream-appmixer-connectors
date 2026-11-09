@@ -1,6 +1,5 @@
 'use strict';
 const Hubspot = require('../../Hubspot');
-const ITEM_SCHEMA = require('../../item-schemas.json').deal;
 
 const outputInspector = async (context) => {
     if (context.messages.in.content.allAtOnce) {
@@ -37,8 +36,6 @@ const outputInspector = async (context) => {
 
 module.exports = {
 
-    ITEM_SCHEMA,
-
     async receive(context) {
 
         if (context.properties.generateOutputPortOptions) {
@@ -48,46 +45,19 @@ module.exports = {
         const {
             allAtOnce,
             limit = 100,
-            search,
-            pipeline,
-            dealstage
+            search
         } = context.messages.in.content;
 
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
-
-        // Use search API when filtering by pipeline/stage or searching
-        const useSearch = search || pipeline || dealstage;
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         let params = {};
-        if (useSearch) {
-            if (search) {
-                params.query = search;
-            }
-
-            const filters = [];
-            if (pipeline) {
-                filters.push({
-                    propertyName: 'pipeline',
-                    operator: 'EQ',
-                    value: pipeline
-                });
-            }
-            if (dealstage) {
-                filters.push({
-                    propertyName: 'dealstage',
-                    operator: 'EQ',
-                    value: dealstage
-                });
-            }
-
-            if (filters.length > 0) {
-                params.filterGroups = [{ filters }];
-            }
+        if (search) {
+            params.query = search;
         }
 
-        const method = useSearch ? 'post' : 'get';
-        const url = useSearch ? 'crm/v3/objects/deals/search' : 'crm/v3/objects/deals';
+        const method = params.query ? 'post' : 'get';
+        const url = params.query ? 'crm/v3/objects/deals/search' : 'crm/v3/objects/deals';
         const deals = await hs.paginatedCall(method, url, params, limit);
 
         if (allAtOnce) {

@@ -1,11 +1,23 @@
 'use strict';
 const BaseSubscriptionComponent = require('../../BaseSubscriptionComponent');
-const { getObjectProperties } = require('../../commons');
-const ITEM_SCHEMA = require('../../item-schemas.json').contact;
+const { WATCHED_PROPERTIES_CONTACT, getObjectProperties } = require('../../commons');
 
 const subscriptionType = 'contact.propertyChange';
 
 class UpdatedContact extends BaseSubscriptionComponent {
+
+    getSubscriptions() {
+
+        // Only watching for the properties that are present in the CreateContact inspector.
+        const subscriptions = WATCHED_PROPERTIES_CONTACT.map(propertyName => ({
+            enabled: true,
+            subscriptionDetails: {
+                subscriptionType,
+                propertyName
+            }
+        }));
+        return subscriptions;
+    }
 
     async receive(context) {
 
@@ -25,16 +37,19 @@ class UpdatedContact extends BaseSubscriptionComponent {
             });
 
             for (const [contactId, event] of Object.entries(eventsByObjectId)) {
-                // Scope the dedupe key per component instance — staticCache is shared across all
-                // instances, so two flows must not consume each other's events.
-                const cacheKey = `hubspot-contact-updated-${context.componentId}-${contactId}`;
-                const cached = await context.staticCache.get(cacheKey);
-                if (cached && event.occurredAt <= cached) {
-                    continue;
+                const cacheKey = 'hubspot-contact-updated-' + contactId;
+                // Only track changes in these properties. These are the ones present in the CreateContact inspector.
+                // Even if we limit the subscriptions for these properties only, we need this for flows that
+                // are already running and all the subscriptions.
+                if (WATCHED_PROPERTIES_CONTACT.includes(event.propertyName)) {
+                    const cached = await context.staticCache.get(cacheKey);
+                    if (cached && event.occurredAt <= cached) {
+                        continue;
+                    }
+                    // Cache the event for 5s to avoid duplicates
+                    await context.staticCache.set(cacheKey, event.occurredAt, context.config?.eventCacheTTL || 5000);
+                    events[contactId] = { occurredAt: event.occurredAt };
                 }
-                // Cache the event for 5s to avoid duplicates
-                await context.staticCache.set(cacheKey, event.occurredAt, context.config?.eventCacheTTL || 5000);
-                events[contactId] = { occurredAt: event.occurredAt };
             }
         } finally {
             await lock?.unlock();
@@ -72,16 +87,6 @@ class UpdatedContact extends BaseSubscriptionComponent {
 
         return context.response();
     }
-
-    async test(context) {
-
-        const record = await this.fetchLatestExample(context, 'contacts', { sortProperty: 'lastmodifieddate' });
-        if (!record) {
-            throw new context.CancelError('No contact found to use as test data.');
-        }
-        return context.sendJson(record, 'contact');
-    }
 }
 
 module.exports = new UpdatedContact(subscriptionType);
-module.exports.ITEM_SCHEMA = ITEM_SCHEMA;

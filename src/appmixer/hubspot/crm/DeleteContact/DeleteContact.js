@@ -9,12 +9,8 @@ module.exports = {
             contactId
         } = context.messages.in.content;
 
-        if (!contactId) {
-            throw new context.CancelError('Contact ID is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         await hs.call('delete', `crm/v3/objects/contacts/${contactId}`);
 

@@ -14,18 +14,8 @@ module.exports = {
             price
         } = context.messages.lineItem.content;
 
-        if (!productId) {
-            throw new context.CancelError('Product ID is required!');
-        }
-        if (!name) {
-            throw new context.CancelError('Name is required!');
-        }
-        if (!quantity) {
-            throw new context.CancelError('Quantity is required!');
-        }
-
         const { auth } = context;
-        const hs = new Hubspot(auth.accessToken, context.config, context.httpRequest);
+        const hs = new Hubspot(auth.accessToken, context.config);
 
         const payload = {
             properties: {
