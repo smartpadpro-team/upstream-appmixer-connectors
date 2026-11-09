@@ -282,6 +282,31 @@ class ZohoClient {
                 throw e;
             });
     }
+
+    async uploadAttachment(context, endpoint, form) {
+        const accessToken = context.auth?.accessToken || context.accessToken;
+        const region = context.profileInfo?.region || regionAuth;
+
+        check.assert.string(accessToken, `Missing accessToken: ${accessToken}.`);
+        check.assert.string(region, `Missing region: ${region}.`);
+
+        const apiUrl = `${apiEndpoint(region)}/crm/v2${endpoint}`;
+
+        const { data } = await context.httpRequest({
+            url: apiUrl,
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'User-Agent': 'AppMixer',
+                ...form.getHeaders()
+            },
+            data: form
+        });
+
+        return data;
+    }
+
+
 }
 
 module.exports = ZohoClient;
